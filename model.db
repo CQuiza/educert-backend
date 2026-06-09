@@ -1,0 +1,151 @@
+-- Tabla de usuarios con roles (admin, teacher, student)
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL, -- actualizable
+    password_hash VARCHAR(255) NOT NULL, -- actualizable
+    name VARCHAR(255) NOT NULL, -- actualizable
+    first_last_name VARCHAR(255) NOT NULL, -- actualizable
+    second_last_name VARCHAR(255), -- actualizable
+    role VARCHAR(50) CHECK (role IN ('superuser', 'admin', 'teacher', 'student')) NOT NULL, -- actualizable
+    identity_type VARCHAR(50) CHECK (identity_type IN ('CC', 'TI', 'OTHER')) NOT NULL, -- actualizable
+    identity_number VARCHAR(50) UNIQUE NOT NULL,    -- actualizable
+    phone_number VARCHAR(20) UNIQUE NOT NULL, -- actualizable
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE -- actualizable
+);
+
+-- Cursos (creados por docentes)
+CREATE TABLE courses (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL, -- actualizable
+    description TEXT, -- actualizable
+    certificate_type_id INTEGER REFERENCES certificate_types(id), -- actualizable
+    teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- actualizable
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')) -- actualizable
+);
+
+-- Módulos dentro de un curso
+CREATE TABLE modules (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL, -- actualizable
+    order_index INTEGER NOT NULL, -- actualizable
+    UNIQUE(course_id, order_index)
+);
+
+-- Lecciones (multimedia: texto, imagen, video)
+CREATE TABLE lessons (
+    id SERIAL PRIMARY KEY,
+    module_id INTEGER REFERENCES modules(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL, -- actualizable
+    text_content TEXT, -- actualizable
+    image_content_url TEXT, -- actualizable
+    video_content_url TEXT, -- actualizable
+    file_content_url TEXT, -- actualizable
+    order_index INTEGER NOT NULL, -- actualizable
+    UNIQUE(module_id, order_index)
+);
+
+-- Progreso del estudiante por lección
+CREATE TABLE user_progress (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+    completed BOOLEAN DEFAULT FALSE, -- actualizable
+    completed_at TIMESTAMP, -- actualizable
+    UNIQUE(user_id, lesson_id)
+);
+
+-- Tipos de certificado (configurables por admin); el curso referencia el tipo (certificate_types.course_id eliminado)
+CREATE TABLE certificate_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL, -- actualizable
+    reference TEXT, -- actualizable
+    type VARCHAR(20) CHECK (type IN ('basic', 'advanced', 'diploma')) NOT NULL, -- actualizable
+    hours INTEGER NOT NULL, -- actualizable
+    validity_type VARCHAR(50) CHECK (validity_type IN ('years', 'months', 'days')) NOT NULL, -- actualizable
+    validity_value INTEGER NOT NULL,  -- número de unidades de tiempo de validez desde emisión (actualizable)
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Certificados emitidos
+CREATE TABLE certificates (
+    id SERIAL PRIMARY KEY,
+    unique_id UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+    certificate_type_id INTEGER REFERENCES certificate_types(id),
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,            -- calculado automáticamente
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired')), -- actualizable
+    qr_code_url VARCHAR(255),        -- ruta al QR generado
+    pdf_url VARCHAR(255),            -- ruta al PDF base (sin marca)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Función y trigger para calcular expires_at al insertar
+CREATE OR REPLACE FUNCTION set_expires_at() RETURNS TRIGGER AS $$
+BEGIN
+    NEW.expires_at := NEW.issued_at + (SELECT validity_years FROM certificate_types WHERE id = NEW.certificate_type_id) * INTERVAL '1 year';
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER before_insert_certificate
+BEFORE INSERT ON certificates
+FOR EACH ROW
+EXECUTE FUNCTION set_expires_at();
+
+-- Auditoría de cambios en certificados
+CREATE TABLE certificate_audit (
+    id SERIAL PRIMARY KEY,
+    certificate_id INTEGER REFERENCES certificates(id),
+    certificate_unique_id UUID,
+    action VARCHAR(50),            -- issued, edited, revoked, deleted
+    performed_by INTEGER REFERENCES users(id),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para rendimiento
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_courses_teacher ON courses(teacher_id);
+CREATE INDEX idx_user_progress_user ON user_progress(user_id);
+CREATE INDEX idx_certificates_user ON certificates(user_id);
+CREATE INDEX idx_certificates_unique_id ON certificates(unique_id);
+CREATE INDEX idx_certificates_status_expires ON certificates(status, expires_at);
+
+-- FK circular courses/certificate_types resuelta: solo courses.certificate_type_id → certificate_types
+CREATE TABLE course_enrollments (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, course_id)
+);
+CREATE INDEX idx_enrollments_user ON course_enrollments(user_id);
+CREATE INDEX idx_enrollments_course ON course_enrollments(course_id);
+
+
+
+CREATE TABLE IF NOT EXISTS worker_audit (
+    id          INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    task_name   VARCHAR(100) NOT NULL,
+    status      VARCHAR(20) NOT NULL,
+    started_at  TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    details     TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_worker_audit_task_name
+    ON worker_audit (task_name);
+
+CREATE INDEX IF NOT EXISTS idx_worker_audit_status
+    ON worker_audit (status);
+
+CREATE INDEX IF NOT EXISTS idx_worker_audit_created_at
+    ON worker_audit (created_at);
