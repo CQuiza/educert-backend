@@ -40,11 +40,15 @@ async def list_users(
 
 @router.get("/certified", response_model=list[UserWithCertificatesRead])
 @limiter.limit("10/minute")
-async def list_certified_students_public(
-    request: Request, db: Annotated[AsyncSession, Depends(get_db)],
+async def list_certified_students(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current: Annotated[User, Depends(get_current_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[User]:
+    if not is_super_or_admin(current):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     rows = await user_repository.list_certified_students(db, skip=skip, limit=limit)
     return list(rows)
 
