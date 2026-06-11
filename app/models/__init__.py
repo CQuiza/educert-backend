@@ -16,6 +16,7 @@ from app.models.enums import (
     ValidityUnit,
     WorkerStatus,
 )
+from app.models.lesson_file import LessonFile
 from app.models.lesson_task import LessonTask
 from app.models.lesson import Lesson
 from app.models.module import Module
@@ -34,10 +35,10 @@ __all__ = [
     "CertificateTypeKind",
     "Course",
     "CourseEnrollment",
-    "CourseStatus",
     "EmailAudit",
     "IdentityType",
     "Lesson",
+    "LessonFile",
     "LessonTask",
     "Module",
     "User",
