@@ -11,7 +11,7 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.enrollment_repository import course_enrollment_repository
 from app.schemas.enrollment import CourseEnrollmentCreate, CourseEnrollmentRead
-from app.services.access import is_super_or_admin
+from app.services.access import is_super_or_admin, is_teacher
 
 router = APIRouter(prefix="/course-enrollments", tags=["course-enrollments"])
 
@@ -27,6 +27,9 @@ async def list_enrollments(
 ) -> list:
     if current.role == UserRole.student.value:
         rows = await course_enrollment_repository.list_by_user(db, current.id, skip=skip, limit=limit)
+        return list(rows)
+    if is_teacher(current):
+        rows = await course_enrollment_repository.list_by_teacher_courses(db, current.id, skip=skip, limit=limit)
         return list(rows)
     if not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")

@@ -26,9 +26,6 @@ class CertificateStorageService:
 
     def __init__(self, settings: Settings | None = None):
         self._settings = settings or get_settings()
-        if not (self._settings.minio_access_key and self._settings.minio_secret_key):
-            msg = "MinIO es obligatorio: defina MINIO_ACCESS_KEY y MINIO_SECRET_KEY."
-            raise RuntimeError(msg)
 
     # ── helpers de clave ──────────────────────────────────────
 
@@ -42,10 +39,16 @@ class CertificateStorageService:
 
     # ── upload ────────────────────────────────────────────────
 
+    def _ensure_minio_configured(self) -> None:
+        if not (self._settings.minio_access_key and self._settings.minio_secret_key):
+            msg = "MinIO es obligatorio: defina MINIO_ACCESS_KEY y MINIO_SECRET_KEY."
+            raise RuntimeError(msg)
+
     async def upload_certificate_files(
         self, uid: str, pdf_bytes: bytes, qr_bytes: bytes
     ) -> None:
         """Sube PDF y QR al bucket."""
+        self._ensure_minio_configured()
         logger.info("Subiendo PDF+QR a MinIO — uid=%s", uid)
 
         def go() -> None:
@@ -64,6 +67,7 @@ class CertificateStorageService:
 
     async def upload_pdf(self, uid: str, pdf_bytes: bytes) -> None:
         """Sube solo el PDF (útil tras regenerar o marcar con agua)."""
+        self._ensure_minio_configured()
         logger.info("Subiendo PDF a MinIO — uid=%s", uid)
 
         def go() -> None:
@@ -83,6 +87,7 @@ class CertificateStorageService:
 
     async def download_pdf(self, uid: str) -> bytes:
         """Descarga el PDF del bucket."""
+        self._ensure_minio_configured()
         logger.info("Descargando PDF de MinIO — uid=%s", uid)
 
         def go() -> bytes:
@@ -102,6 +107,7 @@ class CertificateStorageService:
 
     async def delete_certificate_files(self, uid: str) -> None:
         """Elimina PDF y QR del bucket."""
+        self._ensure_minio_configured()
         logger.info("Eliminando PDF+QR de MinIO — uid=%s", uid)
 
         def go() -> None:

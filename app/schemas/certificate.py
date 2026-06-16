@@ -26,6 +26,9 @@ class CertificateIssueRequest(BaseModel):
     issued_at: datetime | None = Field(
         default=None, description="Fecha personalizada de emisión del certificado"
     )
+    validity_extension: int | None = Field(
+        default=None, description="Sobreescribe la vigencia del tipo (en años)"
+    )
 
 
 class CertificateUpdate(BaseModel):
@@ -50,6 +53,17 @@ class CertificateRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CertificateBatchIssueRequest(BaseModel):
+    user_id: int
+    certificate_type_ids: list[int]
+    issued_at: datetime | None = None
+
+
+class CertificateBatchIssueResponse(BaseModel):
+    issued: list[CertificateRead]
+    errors: list[dict]
 
 
 class CertificateSearchResult(BaseModel):

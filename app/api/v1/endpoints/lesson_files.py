@@ -1,6 +1,7 @@
 """Archivos de lecciones."""
 
 import asyncio
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
@@ -25,6 +26,19 @@ from app.services.access import (
     teacher_owns_module,
 )
 from app.utils.minio_client import get_minio_client
+
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf", ".docx", ".pptx", ".xlsx"}
+
+
+def _validate_file_extension(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Extensión '{ext}' no permitida. Solo: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+    return ext.lstrip(".")
+
 
 router = APIRouter(prefix="/lessons/{lesson_id}/files", tags=["lesson_files"])
 
@@ -116,9 +130,7 @@ async def upload_lesson_file(
             detail=f"El archivo supera el límite de {settings.lesson_file_max_upload_size_mb} MB",
         )
     original_filename = file.filename or f"lesson-file-{file_id}"
-    ext = ""
-    if original_filename and "." in original_filename:
-        ext = original_filename.rsplit(".", 1)[-1]
+    ext = _validate_file_extension(original_filename)
     object_name = f"{settings.minio_path_lesson_files}/{lesson_id}/{file_id}.{ext}"
 
     try:

@@ -14,7 +14,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
 from app.core.settings import get_settings
-from app.models import LessonTask  # noqa: F401 — asegura registro del mapper
 from app.models.certificate import Certificate
 from app.models.certificate_audit import CertificateAudit
 from app.models.email_audit import EmailAudit

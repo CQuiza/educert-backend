@@ -99,10 +99,13 @@ async def teacher_owns_module(db: AsyncSession, user: User, module: Module) -> b
 
 
 async def teacher_owns_lesson(db: AsyncSession, user: User, lesson: Lesson) -> bool:
-    mod = await module_repository.get_by_id(db, lesson.module_id)
-    if not mod:
-        return False
-    return await teacher_owns_module(db, user, mod)
+    r = await db.execute(
+        select(Course)
+        .join(Module, Module.course_id == Course.id)
+        .where(Module.id == lesson.module_id)
+    )
+    course = r.scalar_one_or_none()
+    return bool(course and course.teacher_id == user.id)
 
 
 def require_staff(user: User) -> None:

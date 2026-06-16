@@ -1,6 +1,5 @@
 """Configuración de la aplicación con pydantic-settings."""
 
-from email.policy import default
 from functools import lru_cache
 from typing import Literal
 

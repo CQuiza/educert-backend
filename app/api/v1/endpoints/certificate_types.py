@@ -34,10 +34,8 @@ async def list_certificate_types(
 async def get_certificate_type(
     type_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current: Annotated[User, Depends(get_current_user)],
+    optional_user: Annotated[User | None, Depends(get_optional_user)],
 ) -> object:
-    if not is_super_or_admin(current):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     ct = await certificate_type_repository.get_by_id(db, type_id)
     if not ct:
         raise HTTPException(

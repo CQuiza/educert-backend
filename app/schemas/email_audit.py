@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EmailAuditRead(BaseModel):
@@ -15,4 +15,4 @@ class EmailAuditRead(BaseModel):
     created_at: datetime
     sent_at: datetime | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

@@ -3,12 +3,12 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash, verify_password
 from app.models.enums import UserRole
 from app.models.user import User
+from app.repositories.course_repository import course_repository
 from app.repositories.user_repository import user_repository
 from app.schemas.user import UserCreate, UserUpdate
 from app.utils.email import send_credentials_with_audit
@@ -236,10 +236,7 @@ class UserService:
 
         # 2. Desasignar cursos y eliminar usuario
         try:
-            await db.execute(
-                text("UPDATE courses SET teacher_id = NULL WHERE teacher_id = :uid"),
-                {"uid": user.id},
-            )
+            await course_repository.unassign_teacher(db, user.id)
             await db.flush()
             await user_repository.delete(db, user)
             await db.flush()

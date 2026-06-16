@@ -68,33 +68,6 @@ class MinioClient:
             r.close()
             r.release_conn()
 
-    def download_pdf(self, object_name: str, destination_path: str | Path) -> Path:
-        """Descarga un objeto a ruta local (se asume contenido PDF)."""
-        dest = Path(destination_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        self.client.fget_object(self.bucket, object_name, str(dest))
-        return dest
-
-    def upload_pdf(self, object_name: str, file_path: str | Path) -> None:
-        """Sube un fichero PDF al bucket."""
-        path = Path(file_path)
-        self.client.fput_object(
-            self.bucket,
-            object_name,
-            str(path),
-            content_type="application/pdf",
-        )
-
-    def upload_qr(self, object_name: str, file_path: str | Path) -> None:
-        """Sube una imagen QR (PNG) al bucket."""
-        path = Path(file_path)
-        self.client.fput_object(
-            self.bucket,
-            object_name,
-            str(path),
-            content_type="image/png",
-        )
-
     def upload_bytes(
         self,
         object_name: str,

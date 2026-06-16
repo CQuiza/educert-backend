@@ -11,6 +11,12 @@ class LessonFileCreate(BaseModel):
     order_index: int = 0
 
 
+class LessonFileUpdate(BaseModel):
+    original_filename: str | None = None
+    mime_type: str | None = None
+    order_index: int | None = None
+
+
 class LessonFileRead(LessonFileCreate):
     id: int
     lesson_id: int

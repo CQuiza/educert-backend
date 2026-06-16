@@ -7,8 +7,7 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-from app.core import settings
-from app.core.settings import Settings, get_settings
+from app.core.settings import get_settings
 
 settings = get_settings()
 # 1. Instanciamos Celery
@@ -29,10 +28,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.backup_database_to_minio",
         "schedule": crontab(hour=1, minute=0),
     },
-    "hacer-backup-bd-cada-madrugada": {
-        "task": "app.workers.tasks.backup_database_to_minio",
-        "schedule": crontab(hour=1, minute=0),  # Todos los días a las 01:00
-    },
+    # TODO: agregar "hacer-backup-certificados-cada-madrugada" cuando se implemente
+    # la tarea de backup de certificados a MinIO
 }
 
 celery_app.conf.result_backend = "rpc://"

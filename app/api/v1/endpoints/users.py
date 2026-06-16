@@ -28,12 +28,18 @@ async def list_users(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     role: UserRole | None = None,
+    user_id: Annotated[int | None, Query()] = None,
 ) -> list[User]:
     if not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     if role == UserRole.superuser and current.role != UserRole.superuser.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo superusuarios pueden listar superusuarios")
     exclude_superuser = current.role != UserRole.superuser.value
+    if user_id is not None:
+        u = await user_repository.get_by_id(db, user_id)
+        if not u:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+        return [u]
     rows = await user_repository.list(db, skip=skip, limit=limit, role=role, exclude_superuser=exclude_superuser)
     return list(rows)
 

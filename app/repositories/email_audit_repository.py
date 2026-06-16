@@ -52,8 +52,10 @@ class EmailAuditRepository:
         entry: EmailAudit,
         fields: dict[str, object],
     ) -> EmailAudit:
+        allowed = {"status", "error"}
         for k, v in fields.items():
-            setattr(entry, k, v)
+            if k in allowed:
+                setattr(entry, k, v)
         await db.flush()
         await db.refresh(entry)
         return entry

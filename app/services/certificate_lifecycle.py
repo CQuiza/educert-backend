@@ -45,6 +45,7 @@ class CertificateLifecycleService:
         user_id: int,
         certificate_type_id: int,
         issued_at: datetime | None = None,
+        validity_extension: int | None = None,
         background_tasks=None,
     ):
         """Crea certificado, genera PDF, sube a MinIO, audita y notifica."""
@@ -68,11 +69,19 @@ class CertificateLifecycleService:
         else:
             issued_at = datetime.now(UTC)
 
-        expires_at = compute_certificate_expires_at(
-            issued_at,
-            ct.validity_type,
-            ct.validity_value,
-        )
+        vt = ct.validity_type
+        vv = ct.validity_value
+        if validity_extension is not None:
+            vt = "years"
+            vv = validity_extension
+        expires_at = compute_certificate_expires_at(issued_at, vt, vv)
+
+        validity_years = None
+        if validity_extension is not None:
+            validity_years = validity_extension
+        elif ct.validity_type == "years":
+            validity_years = ct.validity_value
+
         settings = get_settings()
 
         base = settings.base_url.rstrip("/")
@@ -97,6 +106,7 @@ class CertificateLifecycleService:
         verify_url = f"{base}{api}/certificates/view/{uid}"
         pdf_bytes, qr_bytes = self._pdf.generate(
             student, ct, issued_at, verify_url, settings,
+            validity_years=validity_years,
         )
         await self._storage.upload_certificate_files(uid, pdf_bytes, qr_bytes)
 
@@ -118,6 +128,7 @@ class CertificateLifecycleService:
                 base,
                 api,
                 background_tasks,
+                user_name=admin.first_last_name,
             )
 
         logger.info("Certificado emitido — uid=%s, student=%s, ct=%s",

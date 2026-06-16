@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UserAuditRead(BaseModel):
@@ -12,4 +12,4 @@ class UserAuditRead(BaseModel):
     deleted_by: int | None = None
     snapshot: dict
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

@@ -70,5 +70,14 @@ class CourseRepository:
     async def delete(self, db: AsyncSession, course: Course) -> None:
         await db.delete(course)
 
+    async def unassign_teacher(self, db: AsyncSession, teacher_id: int) -> None:
+        r = await db.execute(
+            select(Course).where(Course.teacher_id == teacher_id)
+        )
+        courses = r.scalars().all()
+        for c in courses:
+            c.teacher_id = None
+        await db.flush()
+
 
 course_repository = CourseRepository()

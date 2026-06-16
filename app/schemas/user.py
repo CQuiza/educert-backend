@@ -5,7 +5,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import IdentityType, UserRole
-
 from app.schemas.certificate import CertificateRead
 
 class UserBase(BaseModel):

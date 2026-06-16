@@ -174,6 +174,7 @@ class CertificateEditorData:
     certificate_type_kind: str
     certificate_type_name: str
     hours: int
+    validity_years: int | None = None
 
 
 class CertificateEditor:
@@ -305,6 +306,14 @@ class CertificateEditor:
         y_para = _LAYOUT["legal_top_y"] - th
         para.drawOn(c, x_para, y_para)
 
+        # Vigencia (después del QR, misma altura)
+        if data.validity_years is not None:
+            from app.services.datetime_utils import number_to_spanish_years_text
+            c.setFont(f_tahoma, 9)
+            c.setFillColor(navy)
+            text = f"Este certificado tiene vigencia de {number_to_spanish_years_text(data.validity_years)} desde su fecha de emisión"
+            c.drawCentredString(cx, _LAYOUT["qr_from_bottom"], text)
+
         # QR
         qr_png.seek(0)
         ir = ImageReader(qr_png)
@@ -344,10 +353,6 @@ def apply_revoked_watermark_pdf(
         c.setFont(font, fs)
         c.translate(w_pt / 2.0, h_pt / 2.0)
         c.rotate(45)
-        # c.rotate(32)
-        # c.drawCentredString(0, 0, watermark_text)
-        # c.rotate(-18)
-        # c.setFont(font, fs * 0.65)
         c.drawCentredString(0, -fs * 1.2, watermark_text)
         c.restoreState()
         c.save()

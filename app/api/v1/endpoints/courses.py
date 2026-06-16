@@ -17,7 +17,7 @@ from app.services.course_service import course_service
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
-@router.get("", response_model=list[CoursePublicRead])
+@router.get("")
 async def list_courses(
     db: Annotated[AsyncSession, Depends(get_db)],
     optional_user: Annotated[User | None, Depends(get_optional_user)],
@@ -25,7 +25,9 @@ async def list_courses(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list:
     rows = await course_service.list_for_actor(db, actor=optional_user, skip=skip, limit=limit)
-    return list(rows)
+    if optional_user and is_super_or_admin(optional_user):
+        return [CourseRead.model_validate(r) for r in rows]
+    return [CoursePublicRead.model_validate(r) for r in rows]
 
 
 @router.get("/{course_id}", response_model=CourseRead)

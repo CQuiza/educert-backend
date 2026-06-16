@@ -2,29 +2,34 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
 from minio.error import S3Error
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_user
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.settings import get_settings
+from app.models.certificate import Certificate
 from app.models.enums import CertificateStatus, UserRole
 from app.models.user import User
 from app.repositories.certificate_repository import certificate_repository
 from app.repositories.user_repository import user_repository
 from app.schemas.certificate import (
+    CertificateBatchIssueRequest,
+    CertificateBatchIssueResponse,
     CertificateIssueRequest,
     CertificateRead,
     CertificateSearchResult,
     CertificateUpdate,
 )
-from app.services.access import is_super_or_admin
+from app.services.access import is_super_or_admin, require_staff
 from app.services.certificate_lifecycle import certificate_lifecycle
 from app.utils.minio_client import get_minio_client
 
@@ -193,6 +198,7 @@ async def create_certificate(
             user_id=body.user_id,
             certificate_type_id=body.certificate_type_id,
             issued_at=body.issued_at,
+            validity_extension=body.validity_extension,
             background_tasks=background_tasks,
         )
     except PermissionError as e:
@@ -263,6 +269,34 @@ async def delete_certificate(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
 
 
+@router.post("/batch", response_model=CertificateBatchIssueResponse)
+async def batch_issue_certificates(
+    body: CertificateBatchIssueRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current: Annotated[User, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
+) -> dict:
+    require_staff(current)
+    issued: list[CertificateRead] = []
+    errors: list[dict] = []
+
+    for ct_id in body.certificate_type_ids:
+        try:
+            cert = await certificate_lifecycle.issue_certificate(
+                db,
+                admin=current,
+                user_id=body.user_id,
+                certificate_type_id=ct_id,
+                issued_at=body.issued_at,
+                background_tasks=background_tasks,
+            )
+            issued.append(CertificateRead.model_validate(cert))
+        except (PermissionError, ValueError, RuntimeError) as e:
+            errors.append({"certificate_type_id": ct_id, "error": str(e)})
+
+    return CertificateBatchIssueResponse(issued=issued, errors=errors)
+
+
 @router.get("/search-by-identity/{identity_number}", response_model=list[CertificateSearchResult])
 @limiter.limit("5/minute")
 async def search_certificates_by_identity(
@@ -273,9 +307,6 @@ async def search_certificates_by_identity(
     user = await user_repository.get_by_identity_number(db, identity_number)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No se encontraron certificados para esta identidad")
-    from sqlalchemy.orm import selectinload
-    from sqlalchemy import select
-    from app.models.certificate import Certificate
     stmt = (
         select(Certificate)
         .where(

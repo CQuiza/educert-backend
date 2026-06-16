@@ -37,8 +37,6 @@ async def health_workers() -> dict:
             )
 
         return {"status": "healthy", "workers": workers_status}
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

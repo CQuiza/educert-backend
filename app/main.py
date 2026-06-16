@@ -18,19 +18,7 @@ from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.security import get_password_hash
 from app.core.settings import get_settings
 from app.api.v1.router import api_router
-from app.models import (  # noqa: F401 — registra metadatos
-    Certificate,
-    CertificateAudit,
-    CertificateType,
-    Course,
-    CourseEnrollment,
-    Lesson,
-    LessonTask,
-    Module,
-    User,
-    UserProgress,
-    WorkerAudit,
-)
+from app.models.user import User
 
 logging.basicConfig(
     level=logging.INFO,
@@ -184,7 +172,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -196,7 +184,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "0"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Cache-Control"] = "no-store"
+    response.headers["Cache-Control"] = "no-cache, private"
     return response
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)

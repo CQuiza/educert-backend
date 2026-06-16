@@ -118,7 +118,7 @@ async def logout(
     await db.flush()
     settings = get_settings()
     resp = JSONResponse(content={"message": "Sesión cerrada"})
-    resp.delete_cookie(key="access_token", path="/api/v1")
+    resp.delete_cookie(key="access_token", httponly=True, path="/api/v1")
     return resp
 
 

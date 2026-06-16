@@ -12,6 +12,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.course import Course
     from app.models.lesson import Lesson
+    from app.models.module_assessment import ModuleAssessment
 
 
 class Module(Base):
@@ -28,4 +29,8 @@ class Module(Base):
         "Lesson",
         back_populates="module",
         cascade="all, delete-orphan",
+    )
+    assessment: Mapped[ModuleAssessment | None] = relationship(
+        "ModuleAssessment", back_populates="module",
+        cascade="all, delete-orphan", uselist=False,
     )
