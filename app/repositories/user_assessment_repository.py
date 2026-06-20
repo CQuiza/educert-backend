@@ -11,8 +11,11 @@ from sqlalchemy.orm import selectinload
 from app.models.assessment_option import AssessmentOption
 from app.models.assessment_question import AssessmentQuestion
 from app.models.course import Course
+from app.models.lesson import Lesson
+from app.models.lesson_task import LessonTask
 from app.models.module import Module
 from app.models.module_assessment import ModuleAssessment
+from app.models.task_submission import TaskSubmission
 from app.models.user_assessment_attempt import (
     UserAssessmentAnswer,
     UserAssessmentAttempt,
@@ -131,6 +134,54 @@ class UserAssessmentRepository:
         )
         return r.scalars().all()
 
+    async def _get_module_task_progress(
+        self,
+        db: AsyncSession,
+        module_id: int,
+        user_id: int,
+    ) -> tuple[int, int, list[dict]]:
+        """Returns (total_tasks, submitted_tasks, tasks_detail) for a module."""
+        r = await db.execute(
+            select(Lesson).where(Lesson.module_id == module_id)
+        )
+        lesson_ids = [les.id for les in r.scalars().all()]
+        if not lesson_ids:
+            return 0, 0, []
+
+        r2 = await db.execute(
+            select(LessonTask)
+            .where(LessonTask.lesson_id.in_(lesson_ids))
+            .order_by(LessonTask.order_index)
+        )
+        tasks = r2.scalars().all()
+        if not tasks:
+            return 0, 0, []
+
+        task_ids = [t.id for t in tasks]
+        r3 = await db.execute(
+            select(TaskSubmission).where(
+                TaskSubmission.task_id.in_(task_ids),
+                TaskSubmission.user_id == user_id,
+            )
+        )
+        submissions = r3.scalars().all()
+        sub_map = {s.task_id: s for s in submissions}
+
+        tasks_detail = []
+        for t in tasks:
+            s = sub_map.get(t.id)
+            tasks_detail.append({
+                "task_id": t.id,
+                "task_title": t.title,
+                "submitted": s is not None,
+                "submission_id": s.id if s else None,
+                "file_url": s.file_url if s else None,
+                "original_filename": s.original_filename if s else None,
+                "submitted_at": s.submitted_at if s else None,
+            })
+
+        return len(tasks), len(submissions), tasks_detail
+
     async def has_passed(
         self,
         db: AsyncSession,
@@ -186,6 +237,10 @@ class UserAssessmentRepository:
             last_score = float(attempts[0].score) if attempts else None
             passed = any(a.passed for a in attempts)
 
+            total_tasks, submitted_tasks, tasks = (
+                await self._get_module_task_progress(db, mod.id, user_id)
+            )
+
             result.append({
                 "module_id": mod.id,
                 "module_title": mod.title,
@@ -194,6 +249,9 @@ class UserAssessmentRepository:
                 "attempts_count": attempts_count,
                 "last_score": last_score,
                 "passed": passed,
+                "total_tasks": total_tasks,
+                "submitted_tasks": submitted_tasks,
+                "tasks": tasks,
             })
 
         return result
@@ -254,6 +312,10 @@ class UserAssessmentRepository:
                 last_score = float(attempts[0].score) if attempts else None
                 passed = any(a.passed for a in attempts)
 
+                total_tasks, submitted_tasks, tasks = (
+                    await self._get_module_task_progress(db, mod.id, user_id)
+                )
+
                 modules_data.append({
                     "module_id": mod.id,
                     "module_title": mod.title,
@@ -262,6 +324,9 @@ class UserAssessmentRepository:
                     "attempts_count": attempts_count,
                     "last_score": last_score,
                     "passed": passed,
+                    "total_tasks": total_tasks,
+                    "submitted_tasks": submitted_tasks,
+                    "tasks": tasks,
                 })
 
             total = len(modules_data)

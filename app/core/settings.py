@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     minio_path_lesson_files: str = Field(
         default="lessons/files", alias="MINIO_PATH_LESSON_FILES"
     )
+    minio_path_task_submissions: str = Field(
+        default="tasks/submissions", alias="MINIO_PATH_TASK_SUBMISSIONS"
+    )
     lesson_file_max_upload_size_mb: int = Field(
         default=50, alias="LESSON_FILE_MAX_UPLOAD_SIZE_MB"
     )

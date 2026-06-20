@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     module_assessments,
     modules,
     tasks,
+    task_submissions,
     user_audit,
     user_progress,
     users,
@@ -39,5 +40,6 @@ api_router.include_router(email_audit.router)
 api_router.include_router(lesson_files.router)
 api_router.include_router(module_assessments.router)
 api_router.include_router(tasks.router)
+api_router.include_router(task_submissions.router)
 api_router.include_router(user_audit.router)
 api_router.include_router(worker_audit.router)
