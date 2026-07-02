@@ -14,7 +14,7 @@ class CertificateTypeRepository:
         return r.scalar_one_or_none()
 
     async def list(
-        self, db: AsyncSession, *, skip: int = 0, limit: int = 200
+        self, db: AsyncSession, *, skip: int = 0, limit: int = 300
     ) -> Sequence[CertificateType]:
         r = await db.execute(select(CertificateType).offset(skip).limit(limit))
         return r.scalars().all()
