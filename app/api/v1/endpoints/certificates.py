@@ -46,10 +46,11 @@ async def list_certificates(
     user_id: Annotated[int | None, Query()] = None,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    search: Annotated[str | None, Query()] = None,
 ) -> CertificateListResponse:
     if current.role == UserRole.student.value:
-        total = await certificate_repository.count_by_user(db, current.id)
-        rows = await certificate_repository.list_by_user(db, current.id, skip=skip, limit=limit)
+        total = await certificate_repository.count_by_user(db, current.id, search=search)
+        rows = await certificate_repository.list_by_user(db, current.id, skip=skip, limit=limit, search=search)
         return CertificateListResponse(items=list(rows), total=total)
     uid = user_id
     if uid is None:
@@ -58,13 +59,13 @@ async def list_certificates(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Indique user_id o sea admin",
             )
-        total = await certificate_repository.count(db)
-        rows = await certificate_repository.list(db, skip=skip, limit=limit)
+        total = await certificate_repository.count(db, search=search, join_user=True)
+        rows = await certificate_repository.list(db, skip=skip, limit=limit, search=search)
         return CertificateListResponse(items=list(rows), total=total)
     if uid != current.id and not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
-    total = await certificate_repository.count_by_user(db, uid)
-    rows = await certificate_repository.list_by_user(db, uid, skip=skip, limit=limit)
+    total = await certificate_repository.count_by_user(db, uid, search=search)
+    rows = await certificate_repository.list_by_user(db, uid, skip=skip, limit=limit, search=search)
     return CertificateListResponse(items=list(rows), total=total)
 
 

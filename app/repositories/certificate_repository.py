@@ -3,10 +3,12 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.certificate import Certificate
+from app.models.certificate_type import CertificateType
+from app.models.user import User
 
 
 class CertificateRepository:
@@ -18,14 +20,35 @@ class CertificateRepository:
         r = await db.execute(select(Certificate).where(Certificate.unique_id == uid))
         return r.scalar_one_or_none()
 
-    async def count(self, db: AsyncSession) -> int:
-        r = await db.execute(select(func.count(Certificate.id)))
+    def _apply_search(self, q, search: str | None, join_user: bool = False):
+        if not search:
+            return q
+        term = f"%{search}%"
+        conditions = [
+            cast(Certificate.unique_id, String).ilike(term),
+            CertificateType.name.ilike(term),
+        ]
+        if join_user:
+            conditions.extend([
+                User.name.ilike(term),
+                User.email.ilike(term),
+                User.identity_number.ilike(term),
+            ])
+        q = q.join(CertificateType, Certificate.certificate_type_id == CertificateType.id, isouter=True)
+        if join_user:
+            q = q.join(User, Certificate.user_id == User.id, isouter=True)
+        return q.where(or_(*conditions))
+
+    async def count(self, db: AsyncSession, *, search: str | None = None, join_user: bool = False) -> int:
+        q = select(func.count(Certificate.id))
+        q = self._apply_search(q, search, join_user=join_user)
+        r = await db.execute(q)
         return r.scalar_one()
 
-    async def count_by_user(self, db: AsyncSession, user_id: int) -> int:
-        r = await db.execute(
-            select(func.count(Certificate.id)).where(Certificate.user_id == user_id)
-        )
+    async def count_by_user(self, db: AsyncSession, user_id: int, *, search: str | None = None) -> int:
+        q = select(func.count(Certificate.id)).where(Certificate.user_id == user_id)
+        q = self._apply_search(q, search, join_user=False)
+        r = await db.execute(q)
         return r.scalar_one()
 
     async def list_by_user(
@@ -35,17 +58,17 @@ class CertificateRepository:
         *,
         skip: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> Sequence[Certificate]:
-        r = await db.execute(
-            select(Certificate)
-            .where(Certificate.user_id == user_id)
-            .offset(skip)
-            .limit(limit),
-        )
+        q = select(Certificate).where(Certificate.user_id == user_id)
+        q = self._apply_search(q, search, join_user=False)
+        r = await db.execute(q.offset(skip).limit(limit))
         return r.scalars().all()
 
-    async def list(self, db: AsyncSession, *, skip: int = 0, limit: int = 100) -> Sequence[Certificate]:
-        r = await db.execute(select(Certificate).offset(skip).limit(limit))
+    async def list(self, db: AsyncSession, *, skip: int = 0, limit: int = 100, search: str | None = None) -> Sequence[Certificate]:
+        q = select(Certificate)
+        q = self._apply_search(q, search, join_user=True)
+        r = await db.execute(q.offset(skip).limit(limit))
         return r.scalars().all()
 
     async def create(

@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     certificates,
     course_enrollments,
     courses,
+    dashboard,
     email_audit,
     health,
     lesson_files,
@@ -28,6 +29,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(courses.router)
 api_router.include_router(modules.router)
 api_router.include_router(lessons.router)
