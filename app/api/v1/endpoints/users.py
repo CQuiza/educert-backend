@@ -61,11 +61,12 @@ async def list_certified_students(
     current: Annotated[User, Depends(get_current_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    search: Annotated[str | None, Query()] = None,
 ) -> UserWithCertificatesListResponse:
     if not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
-    total = await user_repository.count_certified_students(db)
-    rows = await user_repository.list_certified_students(db, skip=skip, limit=limit)
+    total = await user_repository.count_certified_students(db, search=search)
+    rows = await user_repository.list_certified_students(db, skip=skip, limit=limit, search=search)
     return UserWithCertificatesListResponse(items=list(rows), total=total)
 
 

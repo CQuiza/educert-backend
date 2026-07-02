@@ -73,15 +73,26 @@ class UserRepository:
         r = await db.execute(q.order_by(User.id))
         return r.scalars().all()
 
-    async def count_certified_students(self, db: AsyncSession) -> int:
-        from sqlalchemy import distinct
+    async def count_certified_students(self, db: AsyncSession, *, search: str | None = None) -> int:
+        from sqlalchemy import String, cast, distinct
         from app.models.certificate import Certificate
+        from app.models.certificate_type import CertificateType
 
         q = (
             select(func.count(distinct(User.id)))
             .join(Certificate, User.id == Certificate.user_id)
+            .join(CertificateType, Certificate.certificate_type_id == CertificateType.id, isouter=True)
             .where(User.role == UserRole.student.value)
         )
+        if search:
+            term = f"%{search}%"
+            q = q.where(
+                User.name.ilike(term)
+                | User.email.ilike(term)
+                | User.identity_number.ilike(term)
+                | cast(Certificate.unique_id, String).ilike(term)
+                | CertificateType.name.ilike(term)
+            )
         r = await db.execute(q)
         return r.scalar_one()
 
@@ -143,19 +154,31 @@ class UserRepository:
         *,
         skip: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> Sequence[User]:
+        from sqlalchemy import String, cast
         from sqlalchemy.orm import selectinload
         from app.models.certificate import Certificate
+        from app.models.certificate_type import CertificateType
 
         q = (
             select(User)
             .join(Certificate, User.id == Certificate.user_id)
+            .join(CertificateType, Certificate.certificate_type_id == CertificateType.id, isouter=True)
             .where(User.role == UserRole.student.value)
             .distinct()
             .options(selectinload(User.certificates))
-            .offset(skip)
-            .limit(limit)
         )
+        if search:
+            term = f"%{search}%"
+            q = q.where(
+                User.name.ilike(term)
+                | User.email.ilike(term)
+                | User.identity_number.ilike(term)
+                | cast(Certificate.unique_id, String).ilike(term)
+                | CertificateType.name.ilike(term)
+            )
+        q = q.offset(skip).limit(limit)
         r = await db.execute(q.order_by(User.id))
         return r.scalars().all()
 
