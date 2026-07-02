@@ -14,14 +14,21 @@ from app.core.rate_limit import limiter
 from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.user_repository import user_repository
-from app.schemas.user import UserCreate, UserRead, UserUpdate, UserWithCertificatesRead
+from app.schemas.user import (
+    UserCreate,
+    UserListResponse,
+    UserRead,
+    UserUpdate,
+    UserWithCertificatesListResponse,
+    UserWithCertificatesRead,
+)
 from app.services.access import is_super_or_admin
 from app.services.user_service import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("", response_model=list[UserRead])
+@router.get("", response_model=UserListResponse)
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
@@ -29,7 +36,8 @@ async def list_users(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     role: UserRole | None = None,
     user_id: Annotated[int | None, Query()] = None,
-) -> list[User]:
+    search: Annotated[str | None, Query()] = None,
+) -> UserListResponse:
     if not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
     if role == UserRole.superuser and current.role != UserRole.superuser.value:
@@ -39,12 +47,13 @@ async def list_users(
         u = await user_repository.get_by_id(db, user_id)
         if not u:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-        return [u]
-    rows = await user_repository.list(db, skip=skip, limit=limit, role=role, exclude_superuser=exclude_superuser)
-    return list(rows)
+        return UserListResponse(items=[u], total=1)
+    total = await user_repository.count(db, role=role, exclude_superuser=exclude_superuser, search=search)
+    rows = await user_repository.list(db, skip=skip, limit=limit, role=role, exclude_superuser=exclude_superuser, search=search)
+    return UserListResponse(items=list(rows), total=total)
 
 
-@router.get("/certified", response_model=list[UserWithCertificatesRead])
+@router.get("/certified", response_model=UserWithCertificatesListResponse)
 @limiter.limit("10/minute")
 async def list_certified_students(
     request: Request,
@@ -52,11 +61,12 @@ async def list_certified_students(
     current: Annotated[User, Depends(get_current_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
-) -> list[User]:
+) -> UserWithCertificatesListResponse:
     if not is_super_or_admin(current):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
+    total = await user_repository.count_certified_students(db)
     rows = await user_repository.list_certified_students(db, skip=skip, limit=limit)
-    return list(rows)
+    return UserWithCertificatesListResponse(items=list(rows), total=total)
 
 
 @router.get("/{user_id}", response_model=UserRead)

@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import UserRole
@@ -26,6 +26,28 @@ class UserRepository:
         r = await db.execute(select(User).where(User.phone_number == phone_number))
         return r.scalar_one_or_none()
 
+    async def count(
+        self,
+        db: AsyncSession,
+        *,
+        role: UserRole | None = None,
+        exclude_superuser: bool = False,
+        search: str | None = None,
+    ) -> int:
+        q = select(func.count(User.id))
+        if role is not None:
+            q = q.where(User.role == role.value)
+        if exclude_superuser:
+            q = q.where(User.role != UserRole.superuser.value)
+        if search:
+            q = q.where(
+                User.name.ilike(f"%{search}%")
+                | User.email.ilike(f"%{search}%")
+                | User.identity_number.ilike(f"%{search}%")
+            )
+        r = await db.execute(q)
+        return r.scalar_one()
+
     async def list(
         self,
         db: AsyncSession,
@@ -34,14 +56,34 @@ class UserRepository:
         limit: int = 100,
         role: UserRole | None = None,
         exclude_superuser: bool = False,
+        search: str | None = None,
     ) -> Sequence[User]:
-        q = select(User).offset(skip).limit(limit)
+        q = select(User)
         if role is not None:
             q = q.where(User.role == role.value)
         if exclude_superuser:
             q = q.where(User.role != UserRole.superuser.value)
+        if search:
+            q = q.where(
+                User.name.ilike(f"%{search}%")
+                | User.email.ilike(f"%{search}%")
+                | User.identity_number.ilike(f"%{search}%")
+            )
+        q = q.offset(skip).limit(limit)
         r = await db.execute(q.order_by(User.id))
         return r.scalars().all()
+
+    async def count_certified_students(self, db: AsyncSession) -> int:
+        from sqlalchemy import distinct
+        from app.models.certificate import Certificate
+
+        q = (
+            select(func.count(distinct(User.id)))
+            .join(Certificate, User.id == Certificate.user_id)
+            .where(User.role == UserRole.student.value)
+        )
+        r = await db.execute(q)
+        return r.scalar_one()
 
     async def create(
         self,

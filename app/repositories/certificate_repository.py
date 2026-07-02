@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.certificate import Certificate
@@ -17,6 +17,16 @@ class CertificateRepository:
     async def get_by_uuid(self, db: AsyncSession, uid: UUID) -> Certificate | None:
         r = await db.execute(select(Certificate).where(Certificate.unique_id == uid))
         return r.scalar_one_or_none()
+
+    async def count(self, db: AsyncSession) -> int:
+        r = await db.execute(select(func.count(Certificate.id)))
+        return r.scalar_one()
+
+    async def count_by_user(self, db: AsyncSession, user_id: int) -> int:
+        r = await db.execute(
+            select(func.count(Certificate.id)).where(Certificate.user_id == user_id)
+        )
+        return r.scalar_one()
 
     async def list_by_user(
         self,

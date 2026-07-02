@@ -70,3 +70,8 @@ class CertificateSearchResult(BaseModel):
     user_name: str | None = None
     identity_number: str | None = None
     certificates: list[CertificateRead]
+
+
+class CertificateListResponse(BaseModel):
+    items: list[CertificateRead]
+    total: int

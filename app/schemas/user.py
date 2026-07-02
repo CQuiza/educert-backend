@@ -62,3 +62,13 @@ class UserRead(BaseModel):
 class UserWithCertificatesRead(UserRead):
     certificates: list[CertificateRead] = []
 
+
+class UserListResponse(BaseModel):
+    items: list[UserRead]
+    total: int
+
+
+class UserWithCertificatesListResponse(BaseModel):
+    items: list[UserWithCertificatesRead]
+    total: int
+
