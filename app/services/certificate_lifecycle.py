@@ -135,6 +135,7 @@ class CertificateLifecycleService:
                 api,
                 background_tasks,
                 user_name=admin.first_last_name,
+                certificate_type_name=ct.name,
             )
 
         logger.info("Certificado emitido — uid=%s, student=%s, ct=%s",
@@ -316,6 +317,7 @@ class CertificateLifecycleService:
                 api,
                 background_tasks,
                 user_name=admin.first_last_name,
+                certificate_type_name=ct.name,
             )
 
         logger.info("Certificado renovado — uid=%s, issued_at=%s, expires_at=%s",

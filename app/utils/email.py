@@ -74,6 +74,7 @@ async def send_certificate_issued_email(
     certificate_uid: str,
     base_url: str,
     api_prefix: str = "",
+    certificate_type_name: str | None = None,
 ) -> None:
     """Envía un correo notificando la emisión de un certificado."""
     conf = _get_mail_config()
@@ -87,7 +88,7 @@ async def send_certificate_issued_email(
     message = MessageSchema(
         subject=f"Tu certificado ha sido emitido — {app_name}",
         recipients=[email_to],
-        body=issued_body(app_name, student_name, verify_link),
+        body=issued_body(app_name, student_name, verify_link, certificate_type_name),
         subtype="html",
     )
     fm = FastMail(conf)
@@ -100,6 +101,7 @@ async def send_certificate_expired_email(
     student_name: str,
     certificate_uid: str,
     base_url: str | None = None,
+    certificate_type_name: str | None = None,
 ) -> None:
     """Envía un correo notificando la expiración de un certificado."""
     conf = _get_mail_config()
@@ -113,7 +115,7 @@ async def send_certificate_expired_email(
     message = MessageSchema(
         subject=f"Tu certificado ha expirado — {app_name}",
         recipients=[email_to],
-        body=expired_body(app_name, student_name),
+        body=expired_body(app_name, student_name, certificate_type_name),
         subtype="html",
     )
     fm = FastMail(conf)
@@ -168,6 +170,7 @@ async def send_issued_with_audit(
     base_url: str,
     api_prefix: str,
     user_name: str | None = None,
+    certificate_type_name: str | None = None,
 ) -> None:
     """Notifica emisión de certificado y registra resultado en email_audit."""
     status = EmailStatus.failed.value
@@ -175,7 +178,8 @@ async def send_issued_with_audit(
     traceback_text: str | None = None
     try:
         await send_certificate_issued_email(
-            email_to, student_name, certificate_uid, base_url, api_prefix
+            email_to, student_name, certificate_uid, base_url, api_prefix,
+            certificate_type_name=certificate_type_name,
         )
         status = EmailStatus.sent.value
     except Exception as e:
@@ -205,13 +209,17 @@ async def send_expired_with_audit(
     student_name: str,
     certificate_uid: str,
     user_name: str | None = None,
+    certificate_type_name: str | None = None,
 ) -> None:
     """Notifica expiración de certificado y registra resultado en email_audit."""
     status = EmailStatus.failed.value
     error_text: str | None = None
     traceback_text: str | None = None
     try:
-        await send_certificate_expired_email(email_to, student_name, certificate_uid)
+        await send_certificate_expired_email(
+            email_to, student_name, certificate_uid,
+            certificate_type_name=certificate_type_name,
+        )
         status = EmailStatus.sent.value
     except Exception as e:
         error_text = _root_cause_message(e)

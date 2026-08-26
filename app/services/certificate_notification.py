@@ -17,6 +17,7 @@ class CertificateNotificationService:
         api_prefix: str,
         background_tasks,
         user_name: str | None = None,
+        certificate_type_name: str | None = None,
     ) -> None:
         background_tasks.add_task(
             send_issued_with_audit,
@@ -26,4 +27,5 @@ class CertificateNotificationService:
             base_url,
             api_prefix,
             user_name or student_name,
+            certificate_type_name,
         )
