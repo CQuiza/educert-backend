@@ -56,6 +56,8 @@ class Certificate(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="active", server_default="active"
     )
+    hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    validity_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     qr_code_url: Mapped[str | None] = mapped_column(String(255))
     pdf_url: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(

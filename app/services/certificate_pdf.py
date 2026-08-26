@@ -48,6 +48,7 @@ class CertificatePdfService:
         verify_url: str,
         settings: Settings,
         validity_years: int | None = None,
+        hours: int | None = None,
     ) -> tuple[bytes, bytes]:
         """Construye PDF + QR y devuelve (pdf_bytes, qr_bytes)."""
         logger.info("Generando PDF — student=%s, ct=%s", student.email, certificate_type.name)
@@ -63,7 +64,7 @@ class CertificatePdfService:
             identity_number=student.identity_number,
             certificate_type_kind=certificate_type.type,
             certificate_type_name=certificate_type.name,
-            hours=certificate_type.hours,
+            hours=hours if hours is not None else certificate_type.hours,
             validity_years=validity_years,
         )
         pdf_io = editor.build_merged_pdf(overlay, qr_io)
@@ -94,8 +95,16 @@ class CertificatePdfService:
         base = settings.base_url.rstrip("/")
         api = settings.api_v1_prefix.rstrip("/")
         verify_url = f"{base}{api}/certificates/view/{uid}"
-        validity_years = ct.validity_value if ct.validity_type == "years" else None
-        pdf_bytes, _ = self.generate(student, ct, issued_at, verify_url, settings, validity_years=validity_years)
+        hours = cert.hours if cert.hours is not None else ct.hours
+        validity_years = None
+        if cert.validity_years is not None:
+            validity_years = cert.validity_years
+        elif ct.validity_type == "years":
+            validity_years = ct.validity_value
+        pdf_bytes, _ = self.generate(
+            student, ct, issued_at, verify_url, settings,
+            validity_years=validity_years, hours=hours,
+        )
         logger.info("PDF regenerado — uid=%s, size=%s", str(cert.unique_id), len(pdf_bytes))
         return pdf_bytes
 

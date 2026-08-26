@@ -1,6 +1,7 @@
 """Usuarios y credenciales."""
 
 import logging
+import random
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,21 @@ LOCKOUT_MINUTES = 15
 
 
 class UserService:
+    @staticmethod
+    def _is_placeholder_phone(value: str | None) -> bool:
+        """True si el teléfono está vacío o compuesto solo de ceros/guiones."""
+        digits = (value or "").strip().replace("+", "").replace("-", "")
+        return not digits or set(digits) == {"0"}
+
+    @staticmethod
+    async def _generate_unique_phone_number(db: AsyncSession) -> str:
+        """Genera un número sintético '+000' + 10 dígitos aleatorios único."""
+        rng = random.SystemRandom()
+        for _ in range(100):
+            candidate = f"+000{rng.randint(0, 9_999_999_999):010d}"
+            if not await user_repository.get_by_phone_number(db, candidate):
+                return candidate
+        raise ValueError("No se pudo generar un número de teléfono único")
     async def authenticate(self, db: AsyncSession, email: str, password: str) -> User | None:
         user = await user_repository.get_by_email(db, email)
         if not user or not user.is_active:
@@ -65,10 +81,15 @@ class UserService:
             logger.warning("Identidad duplicada — identity=%s", data.identity_number)
             raise ValueError("El número de identidad ya está registrado")
 
-        existing_phone = await user_repository.get_by_phone_number(db, data.phone_number)
-        if existing_phone:
-            logger.warning("Teléfono duplicado — phone=%s", data.phone_number)
-            raise ValueError("El número de teléfono ya está registrado")
+        phone_number = (data.phone_number or "").strip()
+        if self._is_placeholder_phone(phone_number):
+            phone_number = await self._generate_unique_phone_number(db)
+            logger.info("Teléfono sintético asignado — email=%s, phone=%s", data.email, phone_number)
+        else:
+            existing_phone = await user_repository.get_by_phone_number(db, phone_number)
+            if existing_phone:
+                logger.warning("Teléfono duplicado — phone=%s", phone_number)
+                raise ValueError("El número de teléfono ya está registrado")
 
         hashed = get_password_hash(data.password)
         user = await user_repository.create(
@@ -81,7 +102,7 @@ class UserService:
             role=data.role.value,
             identity_type=data.identity_type.value,
             identity_number=data.identity_number,
-            phone_number=data.phone_number,
+            phone_number=phone_number,
             is_active=data.is_active,
         )
         if background_tasks:
@@ -121,11 +142,18 @@ class UserService:
                 logger.warning("Identidad duplicada al actualizar — identity=%s", payload["identity_number"])
                 raise ValueError("El número de identidad ya está registrado")
 
-        if "phone_number" in payload and payload["phone_number"] != user.phone_number:
-            existing = await user_repository.get_by_phone_number(db, payload["phone_number"])
-            if existing:
-                logger.warning("Teléfono duplicado al actualizar — phone=%s", payload["phone_number"])
-                raise ValueError("El número de teléfono ya está registrado")
+        if "phone_number" in payload:
+            phone_number = (payload["phone_number"] or "").strip()
+            if self._is_placeholder_phone(phone_number):
+                # Vacío/solo ceros → conserva el número actual
+                payload.pop("phone_number")
+            else:
+                payload["phone_number"] = phone_number
+                if phone_number != user.phone_number:
+                    existing = await user_repository.get_by_phone_number(db, phone_number)
+                    if existing:
+                        logger.warning("Teléfono duplicado al actualizar — phone=%s", phone_number)
+                        raise ValueError("El número de teléfono ya está registrado")
 
         if "password" in payload:
             payload["password_hash"] = get_password_hash(payload.pop("password"))

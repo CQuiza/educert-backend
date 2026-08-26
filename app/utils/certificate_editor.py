@@ -26,6 +26,7 @@ _LAYOUT = {
     "identity_y": 282.20,
     "course_line_y": 258.58,
     "cert_name_y": 232.23,
+    "cert_max_width": 720.0,
     "hours_y": 200.60,
     "legal_top_y": 188.0,
     "legal_max_width": 720.0,
@@ -274,11 +275,22 @@ class CertificateEditor:
         c.setFillColor(navy)
         c.drawCentredString(cx, _LAYOUT["course_line_y"], course_line)
 
-        # Nombre certificado
-        c.setFont(f_tahoma, 17)
-        c.drawCentredString(
-            cx, _LAYOUT["cert_name_y"], (data.certificate_type_name).upper()
+        # Nombre certificado (Paragraph con wrap para no desbordar márgenes)
+        cert_name = html.escape(data.certificate_type_name.upper())
+        cert_style = ParagraphStyle(
+            name="cert_name",
+            fontName=f_tahoma,
+            fontSize=17,
+            leading=20.4,
+            textColor=navy,
+            alignment=TA_CENTER,
+            wordWrap="CJK",
         )
+        cert_para = Paragraph(cert_name.replace("\n", "<br/>"), cert_style)
+        cw, ch = cert_para.wrap(_LAYOUT["cert_max_width"], 400.0)
+        x_para = (w_pt - cw) / 2.0
+        mid = (_LAYOUT["course_line_y"] + _LAYOUT["hours_y"]) / 2.0
+        cert_para.drawOn(c, x_para, mid - ch / 2.0)
 
         # Horas
         c.setFont(f_cambria, 18)
@@ -293,8 +305,8 @@ class CertificateEditor:
         style = ParagraphStyle(
             name="legal",
             fontName=f_tahoma,
-            fontSize=9,
-            leading=11,
+            fontSize=8.8,
+            leading=8.8,
             textColor=navy,
             alignment=TA_CENTER,
         )

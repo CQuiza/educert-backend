@@ -46,6 +46,8 @@ class CertificateAuditAction(str, Enum):
     revoked = "revoked"
     deleted = "deleted"
     expired = "expired"
+    renewed = "renewed"
+    reproduced = "reproduced"
 
 
 class WorkerStatus(str, Enum):

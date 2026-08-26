@@ -36,3 +36,36 @@ def expired_body(app_name: str, student_name: str) -> str:
     <p>Si deseas obtener un nuevo certificado, por favor contacta al administrador.</p>
 </body>
 </html>"""
+
+
+def backup_body(
+    app_name: str,
+    *,
+    ok: bool,
+    filename: str,
+    size_bytes: int,
+    destination: str,
+    extra: str | None = None,
+) -> str:
+    size_mb = size_bytes / (1024 * 1024)
+    state = (
+        '<span style="color:#16a34a;font-weight:bold;">OK</span>'
+        if ok
+        else '<span style="color:#dc2626;font-weight:bold;">FALLIDO</span>'
+    )
+    extra_html = (
+        f'<p style="color:#b45309;"><strong>Detalle:</strong> {extra}</p>'
+        if extra
+        else ""
+    )
+    return f"""<html>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+    <h2>Backup de base de datos — {app_name}</h2>
+    <p><strong>Estado:</strong> {state}</p>
+    <p><strong>Archivo:</strong> {filename}</p>
+    <p><strong>Tamaño:</strong> {size_mb:.2f} MB</p>
+    <p><strong>Destino:</strong> {destination}</p>
+    {extra_html}
+    <p>Este mensaje es automático; no responda a este correo.</p>
+</body>
+</html>"""

@@ -70,7 +70,7 @@ class UserRepository:
                 | User.identity_number.ilike(f"%{search}%")
             )
         q = q.offset(skip).limit(limit)
-        r = await db.execute(q.order_by(User.id))
+        r = await db.execute(q.order_by(User.id.desc()))
         return r.scalars().all()
 
     async def count_certified_students(self, db: AsyncSession, *, search: str | None = None) -> int:

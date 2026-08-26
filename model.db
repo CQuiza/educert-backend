@@ -81,6 +81,8 @@ CREATE TABLE certificates (
     issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP,            -- calculado automáticamente
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired')), -- actualizable
+    hours INTEGER,                    -- override opcional de intensidad horaria (NULL = tipo)
+    validity_years INTEGER,           -- override opcional de vigencia en años (NULL = tipo)
     qr_code_url VARCHAR(255),        -- ruta al QR generado
     pdf_url VARCHAR(255),            -- ruta al PDF base (sin marca)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

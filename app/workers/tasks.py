@@ -12,7 +12,7 @@ from celery import shared_task
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncWorkerSessionLocal
 from app.core.settings import get_settings
 from app.models.certificate import Certificate
 from app.models.certificate_audit import CertificateAudit
@@ -21,7 +21,6 @@ from app.models.enums import CertificateStatus, CertificateAuditAction, EmailSta
 from app.repositories.user_repository import user_repository
 from app.services.certificate_storage import CertificateStorageService
 from app.utils.certificate_editor import apply_revoked_watermark_pdf
-from app.utils.minio_client import get_minio_client
 from app.utils.email import send_certificate_expired_email
 from app.utils.worker_audit import log_worker_action
 
@@ -43,7 +42,7 @@ async def _async_check_expired_certificates():
     processed = 0
     errors = []
 
-    async with AsyncSessionLocal() as session:
+    async with AsyncWorkerSessionLocal() as session:
         await log_worker_action(
             session, task_name=task_name, status=WorkerStatus.running.value,
             started_at=started_at,
@@ -140,6 +139,15 @@ def backup_database_to_minio():
 
 
 async def _async_backup_database_to_minio():
+    """Sube el dump diario al MinIO EXTERNO de backup (regla 3-2-1).
+
+    Sin fallback interno: si el MinIO externo falla o no está configurado, el
+    dump se envía ADJUNTO por correo como fallback real y la tarea queda
+    `failed` en worker_audit.
+    """
+    from app.utils.email import send_backup_email_with_audit
+    from app.utils.minio_client import get_backup_minio_client
+
     settings = get_settings()
     started_at = datetime.now(timezone.utc)
     task_name = "backup_database_to_minio"
@@ -171,7 +179,7 @@ async def _async_backup_database_to_minio():
     ]
 
     try:
-        async with AsyncSessionLocal() as session:
+        async with AsyncWorkerSessionLocal() as session:
             try:
                 await log_worker_action(
                     session, task_name=task_name, status=WorkerStatus.running.value,
@@ -183,25 +191,77 @@ async def _async_backup_database_to_minio():
                 subprocess.run(cmd, env=env, check=True, capture_output=True)
                 logger.info("pg_dump completado para %s", filename)
 
-                minio_client = get_minio_client(settings)
-                minio_client.ensure_bucket()
-
-                object_name = f"{settings.minio_path_backup_db.strip('/')}/{filename}"
-
-                minio_client.client.fput_object(
-                    minio_client.bucket,
-                    object_name,
-                    filepath,
-                    metadata={
-                        "backup_created_at": started_at.isoformat(),
-                        "backup_filename": filename,
-                    },
-                )
-
                 file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
 
-                status = WorkerStatus.success.value
-                details = f"Backup {filename} subido a MinIO ({file_size} bytes)"
+                # Primario: MinIO externo de backup, sin fallback interno
+                upload_error: str | None = None
+                uploaded = False
+                backup_client = get_backup_minio_client(settings)
+                if backup_client is None:
+                    upload_error = (
+                        "MinIO de backup no configurado "
+                        "(MINIO_BACKUP_ACCESS_KEY/MINIO_BACKUP_SECRET_KEY)"
+                    )
+                    logger.warning(upload_error)
+                else:
+                    try:
+                        backup_client.ensure_bucket()
+                        object_name = f"{settings.minio_backup_path_db.strip('/')}/{filename}"
+                        backup_client.client.fput_object(
+                            backup_client.bucket,
+                            object_name,
+                            filepath,
+                            metadata={
+                                "backup_created_at": started_at.isoformat(),
+                                "backup_filename": filename,
+                            },
+                        )
+                        uploaded = True
+                        logger.info(
+                            "Backup %s subido al MinIO externo (bucket=%s)",
+                            filename, backup_client.bucket,
+                        )
+                    except Exception as e:
+                        upload_error = f"Error subiendo al MinIO externo: {e}"
+                        logger.exception(upload_error)
+
+                # Notificación: sin adjunto si subió; con el dump adjunto si falló
+                email_to = settings.backup_email_to or settings.superuser_email
+                email_sent = False
+                if email_to:
+                    try:
+                        email_sent = await send_backup_email_with_audit(
+                            session,
+                            email_to=email_to,
+                            filename=filename,
+                            size_bytes=file_size,
+                            uploaded=uploaded,
+                            attachment_path=None if uploaded else filepath,
+                            extra=upload_error,
+                        )
+                    except Exception as e:
+                        logger.exception("Error enviando correo de backup: %s", e)
+                await session.flush()
+
+                if uploaded:
+                    status = WorkerStatus.success.value
+                    details = (
+                        f"Backup {filename} subido al MinIO externo ({file_size} bytes)"
+                        + (f" | correo de notificación {'enviado' if email_sent else 'NO enviado'}"
+                           if email_to else "")
+                    )
+                else:
+                    status = WorkerStatus.failed.value
+                    details = (
+                        f"Error en backup: {upload_error}"
+                        + (
+                            " | correo de fallback enviado"
+                            if email_sent
+                            else " | correo de fallback NO enviado"
+                        )
+                        if email_to
+                        else f"Error en backup: {upload_error}"
+                    )
                 logger.info(details)
 
             except subprocess.CalledProcessError as e:
@@ -209,11 +269,6 @@ async def _async_backup_database_to_minio():
                 status = WorkerStatus.failed.value
                 details = f"pg_dump falló: {detail_str}"
                 logger.error(details)
-
-            except Exception as e:
-                status = WorkerStatus.failed.value
-                details = f"Error en backup: {e}"
-                logger.exception(details)
 
             await log_worker_action(
                 session, task_name=task_name, status=status,

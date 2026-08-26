@@ -94,6 +94,18 @@ class Settings(BaseSettings):
     minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
     minio_region: str = Field(default="", alias="MINIO_REGION")
 
+    # MinIO de backup (externo, fuera del servidor de despliegue; p. ej. vía
+    # túnel SSH persistente 9002->9000). Nombres propios para no colisionar
+    # con el bloque principal (pydantic-settings lee por alias).
+    minio_backup_endpoint: str = Field(default="127.0.0.1:9002", alias="MINIO_BACKUP_ENDPOINT")
+    minio_backup_access_key: str | None = Field(default=None, alias="MINIO_BACKUP_ACCESS_KEY")
+    minio_backup_secret_key: str | None = Field(default=None, alias="MINIO_BACKUP_SECRET_KEY")
+    minio_backup_bucket: str = Field(default="certify-backup", alias="MINIO_BACKUP_BUCKET")
+    minio_backup_path_db: str = Field(default="backup/database", alias="MINIO_BACKUP_PATH_DB")
+    minio_backup_secure: bool = Field(default=False, alias="MINIO_BACKUP_SECURE")
+    minio_backup_region: str = Field(default="", alias="MINIO_BACKUP_REGION")
+    backup_email_to: str | None = Field(default=None, alias="BACKUP_EMAIL_TO")
+
     environment: Literal["development", "staging", "production"] = Field(
         default="development",
         alias="ENVIRONMENT",

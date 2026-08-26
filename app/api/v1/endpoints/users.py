@@ -19,10 +19,12 @@ from app.schemas.user import (
     UserListResponse,
     UserRead,
     UserUpdate,
+    UserUpdateResponse,
     UserWithCertificatesListResponse,
     UserWithCertificatesRead,
 )
 from app.services.access import is_super_or_admin
+from app.services.certificate_lifecycle import certificate_lifecycle
 from app.services.user_service import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -99,6 +101,7 @@ async def create_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo un superusuario puede crear otro superusuario")
     try:
         u = await user_service.create_user(db, body, background_tasks=background_tasks, requesting_role=current.role)
+        await db.commit()
         logger.info("Usuario creado vía API — id=%s, email=%s, by=%s", u.id, u.email, current.email)
         return u
     except ValueError as e:
@@ -106,13 +109,13 @@ async def create_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.patch("/{user_id}", response_model=UserRead)
+@router.patch("/{user_id}", response_model=UserUpdateResponse)
 async def update_user(
     user_id: int,
     body: UserUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
-) -> User:
+) -> object:
     if not is_super_or_admin(current) and current.id != user_id:
         logger.warning("Intento de actualizar usuario sin permiso — target=%s, by=%s", user_id, current.email)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permiso")
@@ -126,8 +129,22 @@ async def update_user(
     if u.role == UserRole.superuser.value and current.role != UserRole.superuser.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo un superusuario puede modificar a otro superusuario")
     updated = await user_service.update_user(db, u, body, requesting_role=current.role)
-    logger.info("Usuario actualizado vía API — id=%s, by=%s", updated.id, current.email)
-    return updated
+
+    # Reproducción atómica de certificados activos si cambian datos de identidad
+    certificates_regenerated = 0
+    changed = set(body.model_dump(exclude_unset=True))
+    identity_fields = {"name", "first_last_name", "second_last_name", "identity_number", "identity_type"}
+    if changed & identity_fields and u.role == UserRole.student.value:
+        certificates_regenerated = await certificate_lifecycle.reproduce_active_for_student(
+            db, student_id=updated.id, admin=current
+        )
+
+    await db.commit()
+    logger.info("Usuario actualizado vía API — id=%s, by=%s, certs_reproducidos=%s",
+                updated.id, current.email, certificates_regenerated)
+    response = UserUpdateResponse.model_validate(updated)
+    response.certificates_regenerated = certificates_regenerated
+    return response
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
@@ -159,6 +176,7 @@ async def delete_user(
         )
     try:
         await user_service.delete_user(db, u, deleted_by=current.id)
+        await db.commit()
         logger.info("Usuario %s (id=%s) eliminado por %s", u.email, u.id, current.email)
         return {"message": f"Usuario {u.email} eliminado exitosamente."}
     except RuntimeError as e:

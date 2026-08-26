@@ -21,7 +21,9 @@ class CertificateAuditRepository:
     async def list(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 500
     ) -> Sequence[CertificateAudit]:
-        r = await db.execute(select(CertificateAudit).offset(skip).limit(limit))
+        r = await db.execute(
+            select(CertificateAudit).offset(skip).limit(limit).order_by(CertificateAudit.id.desc())
+        )
         return r.scalars().all()
 
     async def create(

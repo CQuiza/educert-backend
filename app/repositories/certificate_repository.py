@@ -45,8 +45,17 @@ class CertificateRepository:
         r = await db.execute(q)
         return r.scalar_one()
 
-    async def count_by_user(self, db: AsyncSession, user_id: int, *, search: str | None = None) -> int:
+    async def count_by_user(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        *,
+        search: str | None = None,
+        statuses: Sequence[str] | None = None,
+    ) -> int:
         q = select(func.count(Certificate.id)).where(Certificate.user_id == user_id)
+        if statuses is not None:
+            q = q.where(Certificate.status.in_(statuses))
         q = self._apply_search(q, search, join_user=False)
         r = await db.execute(q)
         return r.scalar_one()
@@ -59,8 +68,11 @@ class CertificateRepository:
         skip: int = 0,
         limit: int = 100,
         search: str | None = None,
+        statuses: Sequence[str] | None = None,
     ) -> Sequence[Certificate]:
         q = select(Certificate).where(Certificate.user_id == user_id)
+        if statuses is not None:
+            q = q.where(Certificate.status.in_(statuses))
         q = self._apply_search(q, search, join_user=False)
         r = await db.execute(q.offset(skip).limit(limit))
         return r.scalars().all()

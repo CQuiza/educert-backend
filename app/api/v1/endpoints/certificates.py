@@ -27,6 +27,7 @@ from app.schemas.certificate import (
     CertificateIssueRequest,
     CertificateListResponse,
     CertificateRead,
+    CertificateRenewRequest,
     CertificateSearchResult,
     CertificateUpdate,
 )
@@ -49,8 +50,12 @@ async def list_certificates(
     search: Annotated[str | None, Query()] = None,
 ) -> CertificateListResponse:
     if current.role == UserRole.student.value:
-        total = await certificate_repository.count_by_user(db, current.id, search=search)
-        rows = await certificate_repository.list_by_user(db, current.id, skip=skip, limit=limit, search=search)
+        visible_statuses = [
+            CertificateStatus.active.value,
+            CertificateStatus.expired.value,
+        ]
+        total = await certificate_repository.count_by_user(db, current.id, search=search, statuses=visible_statuses)
+        rows = await certificate_repository.list_by_user(db, current.id, skip=skip, limit=limit, search=search, statuses=visible_statuses)
         return CertificateListResponse(items=list(rows), total=total)
     uid = user_id
     if uid is None:
@@ -195,15 +200,51 @@ async def create_certificate(
     background_tasks: BackgroundTasks,
 ) -> object:
     try:
-        return await certificate_lifecycle.issue_certificate(
+        result = await certificate_lifecycle.issue_certificate(
             db,
             admin=current,
             user_id=body.user_id,
             certificate_type_id=body.certificate_type_id,
             issued_at=body.issued_at,
             validity_extension=body.validity_extension,
+            hours=body.hours,
             background_tasks=background_tasks,
         )
+        await db.commit()
+        return result
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+
+@router.post("/{certificate_id}/renew", response_model=CertificateRead)
+async def renew_certificate(
+    certificate_id: int,
+    body: CertificateRenewRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current: Annotated[User, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
+) -> object:
+    if not is_super_or_admin(current):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo administradores")
+    cert = await certificate_repository.get_by_id(db, certificate_id)
+    if not cert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Certificado no encontrado")
+    try:
+        result = await certificate_lifecycle.renew_certificate(
+            db,
+            admin=current,
+            cert=cert,
+            issued_at=body.issued_at,
+            validity_extension=body.validity_extension,
+            hours=body.hours,
+            background_tasks=background_tasks,
+        )
+        await db.commit()
+        return result
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
@@ -291,12 +332,15 @@ async def batch_issue_certificates(
                 user_id=body.user_id,
                 certificate_type_id=ct_id,
                 issued_at=body.issued_at,
+                validity_extension=body.validity_extension,
+                hours=body.hours,
                 background_tasks=background_tasks,
             )
             issued.append(CertificateRead.model_validate(cert))
         except (PermissionError, ValueError, RuntimeError) as e:
             errors.append({"certificate_type_id": ct_id, "error": str(e)})
 
+    await db.commit()
     return CertificateBatchIssueResponse(issued=issued, errors=errors)
 
 
@@ -307,7 +351,7 @@ async def search_certificates_by_identity(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[dict]:
     """Público: busca certificados por número de identidad del estudiante."""
-    user = await user_repository.get_by_identity_number(db, identity_number)
+    user = await user_repository.get_by_identity_number(db, identity_number.strip())
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No se encontraron certificados para esta identidad")
     stmt = (

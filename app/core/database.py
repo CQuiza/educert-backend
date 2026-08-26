@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.core.settings import get_settings
 
@@ -31,6 +32,22 @@ engine = create_async_engine(
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+)
+
+# Engine/sessionmaker dedicado al celery-worker: NullPool no reutiliza conexiones
+# entre event loops (cada tarea celery crea y cierra su propio loop con anyio.run,
+# lo que rompería las conexiones asyncpg del pool compartido).
+worker_engine = create_async_engine(
+    _async_database_url(_settings.get_database_url()),
+    echo=_settings.debug,
+    poolclass=NullPool,
+)
+
+AsyncWorkerSessionLocal = async_sessionmaker(
+    worker_engine,
     class_=AsyncSession,
     expire_on_commit=False,
     autoflush=False,
