@@ -173,13 +173,19 @@ async def submit_assessment(
         q = next((q for q in assessment.questions if q.id == ans.question_id), None)
         if not q:
             continue
+        selected_opt = next(
+            (o for o in q.options if o.id == ans.selected_option_id), None
+        )
+        correct_opt = next((o for o in q.options if o.is_correct), None)
         answers_result.append(
             AnswerResult(
                 question_id=ans.question_id,
                 question_text=q.question_text,
                 selected_option_id=ans.selected_option_id,
                 is_correct=ans.is_correct,
-                correct_option_id=None,
+                correct_option_id=correct_opt.id if correct_opt else None,
+                selected_option_text=selected_opt.option_text if selected_opt else None,
+                correct_option_text=correct_opt.option_text if correct_opt else None,
             ).model_dump()
         )
 
