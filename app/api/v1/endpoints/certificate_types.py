@@ -24,7 +24,7 @@ async def list_certificate_types(
     db: Annotated[AsyncSession, Depends(get_db)],
     optional_user: Annotated[User | None, Depends(get_optional_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=500)] = 300,
+    limit: Annotated[int, Query(ge=1, le=10000)] = 5000,
 ) -> list:
     rows = await certificate_type_repository.list(db, skip=skip, limit=limit)
     return list(rows)
