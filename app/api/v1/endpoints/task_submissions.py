@@ -1,7 +1,7 @@
 import asyncio
+import unicodedata
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -20,6 +20,7 @@ from app.repositories.module_repository import module_repository
 from app.repositories.task_submission_repository import task_submission_repository
 from app.schemas.task_submission import TaskSubmissionRead, TaskSubmissionWithUserRead
 from app.services.access import is_super_or_admin, is_teacher
+from app.utils.http_headers import build_content_disposition
 from app.utils.minio_client import get_minio_client
 
 router = APIRouter(tags=["task-submissions"])
@@ -107,7 +108,9 @@ async def submit_task(
 
     import re
     safe_title = re.sub(r"[^\w\s]", "", task.title).strip().replace(" ", "_")
-    original_filename = f"{current.identity_number}_{safe_title}.pdf"
+    original_filename = unicodedata.normalize(
+        "NFC", f"{current.identity_number}_{safe_title}.pdf"
+    )
 
     object_name = (
         f"{settings.minio_path_task_submissions}/{task_id}/{current.id}.pdf"
@@ -228,12 +231,10 @@ async def download_submission_file(
             detail=str(e),
         )
 
-    filename = s.original_filename
-    encoded = quote(filename)
     return Response(
         content=data,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}; filename=\"{encoded}\"",
+            "Content-Disposition": build_content_disposition(s.original_filename, "attachment"),
         },
     )
