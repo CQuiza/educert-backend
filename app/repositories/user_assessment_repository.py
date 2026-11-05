@@ -22,6 +22,24 @@ from app.models.user_assessment_attempt import (
 )
 
 
+def _is_module_completed(
+    *,
+    has_assessment: bool,
+    passed: bool,
+    total_tasks: int,
+    submitted_tasks: int,
+) -> bool:
+    """Un módulo está completo si cumple todos los requisitos que tenga.
+
+    Los módulos sin evaluación o sin tareas no bloquean el avance: solo
+    cuentan como pendientes las evaluaciones existentes no aprobadas y las
+    tareas existentes sin entregar.
+    """
+    assessment_ok = not has_assessment or passed
+    tasks_ok = total_tasks == 0 or submitted_tasks == total_tasks
+    return assessment_ok and tasks_ok
+
+
 class UserAssessmentRepository:
     async def create_attempt(
         self,
@@ -223,7 +241,7 @@ class UserAssessmentRepository:
                     UserAssessmentAttempt.assessment_id.in_(assessment_ids),
                     UserAssessmentAttempt.user_id == user_id,
                 )
-                .order_by(UserAssessmentAttempt.finished_at.desc())
+                .order_by(UserAssessmentAttempt.finished_at.desc().nulls_last())
             )
             for a in a_r.scalars().all():
                 attempts_map.setdefault(a.assessment_id, []).append(a)
@@ -241,6 +259,13 @@ class UserAssessmentRepository:
                 await self._get_module_task_progress(db, mod.id, user_id)
             )
 
+            module_completed = _is_module_completed(
+                has_assessment=assessment is not None,
+                passed=passed,
+                total_tasks=total_tasks,
+                submitted_tasks=submitted_tasks,
+            )
+
             result.append({
                 "module_id": mod.id,
                 "module_title": mod.title,
@@ -249,6 +274,7 @@ class UserAssessmentRepository:
                 "attempts_count": attempts_count,
                 "last_score": last_score,
                 "passed": passed,
+                "completed": module_completed,
                 "total_tasks": total_tasks,
                 "submitted_tasks": submitted_tasks,
                 "tasks": tasks,
@@ -296,7 +322,7 @@ class UserAssessmentRepository:
                     UserAssessmentAttempt.assessment_id.in_(all_assessment_ids),
                     UserAssessmentAttempt.user_id == user_id,
                 )
-                .order_by(UserAssessmentAttempt.finished_at.desc())
+                .order_by(UserAssessmentAttempt.finished_at.desc().nulls_last())
             )
             for a in a_r.scalars().all():
                 attempts_map.setdefault(a.assessment_id, []).append(a)
@@ -316,6 +342,13 @@ class UserAssessmentRepository:
                     await self._get_module_task_progress(db, mod.id, user_id)
                 )
 
+                module_completed = _is_module_completed(
+                    has_assessment=assessment is not None,
+                    passed=passed,
+                    total_tasks=total_tasks,
+                    submitted_tasks=submitted_tasks,
+                )
+
                 modules_data.append({
                     "module_id": mod.id,
                     "module_title": mod.title,
@@ -324,13 +357,14 @@ class UserAssessmentRepository:
                     "attempts_count": attempts_count,
                     "last_score": last_score,
                     "passed": passed,
+                    "completed": module_completed,
                     "total_tasks": total_tasks,
                     "submitted_tasks": submitted_tasks,
                     "tasks": tasks,
                 })
 
             total = len(modules_data)
-            completed = sum(1 for m in modules_data if m["passed"])
+            completed = sum(1 for m in modules_data if m["completed"])
             pct = (completed / total * 100) if total > 0 else 0.0
 
             result.append({

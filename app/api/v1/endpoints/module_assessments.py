@@ -274,7 +274,7 @@ async def get_course_progress(
         db, uid, course_id
     )
     total = len(modules_data)
-    completed = sum(1 for m in modules_data if m["passed"])
+    completed = sum(1 for m in modules_data if m["completed"])
     pct = (completed / total * 100) if total > 0 else 0.0
 
     return {
